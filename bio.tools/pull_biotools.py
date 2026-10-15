@@ -2,8 +2,13 @@
 
 Step 1 (fetch):   page through https://bio.tools/api/tool/ and save every tool
                   record, unmodified, to data/biotools_raw.jsonl (one tool per line).
-Step 2 (extract): read the raw file and write data/biotools_publications.csv with
-                  one row per (tool, publication): biotoolsID, pmid, pmcid, doi.
+Step 2 (extract): read the raw file and write two CSVs with one row per (tool, publication):
+                  biotoolsID, pmid, pmcid, doi, type, is_primary
+                  - data/biotools_publications.csv       every publication
+                  - data/biotools_main_publications.csv  per tool: its "Primary" publication(s), or the
+                                                         first listed publication if none is Primary
+                  bio.tools only annotates a publication type for some tools, so is_primary is "false"
+                  on the fallback rows of the second file.
 
 Usage:
     python3 pull_biotools.py                 # fetch, then extract
@@ -25,6 +30,8 @@ API_URL = "https://bio.tools/api/tool/?format=json&page={page}"
 DATA_DIR = Path(__file__).resolve().parent / "data"
 RAW_FILE = DATA_DIR / "biotools_raw.jsonl"
 IDS_FILE = DATA_DIR / "biotools_publications.csv"
+MAIN_FILE = DATA_DIR / "biotools_main_publications.csv"
+CSV_HEADER = ["biotoolsID", "pmid", "pmcid", "doi", "type", "is_primary"]
 
 MAX_RETRIES = 5
 TIMEOUT = 60  # seconds per request
@@ -90,31 +97,51 @@ def clean_doi(value):
 
 
 def extract_ids():
-    """Write one CSV row per publication that has at least one of PMID/PMCID/DOI."""
-    seen = set()
-    rows = []
+    """Write one CSV row per publication that has at least one of PMID/PMCID/DOI.
+
+    `type` holds bio.tools' publication types joined with ";" (e.g. "Primary;Method"), empty if
+    unannotated. A publication listed twice for one tool has its types merged into one row.
+    """
+    publications = {}  # (biotoolsID, pmid, pmcid, doi) -> list of types
     tools = 0
     with open(RAW_FILE, encoding="utf-8") as raw:
         for line in raw:
             tool = json.loads(line)
             tools += 1
             for publication in tool.get("publication") or []:
-                row = (
+                key = (
                     tool["biotoolsID"],
                     clean(publication.get("pmid")),
                     clean(publication.get("pmcid")),
                     clean_doi(publication.get("doi")),
                 )
-                if any(row[1:]) and row not in seen:
-                    seen.add(row)
-                    rows.append(row)
-    with open(IDS_FILE, "w", newline="", encoding="utf-8") as out:
-        writer = csv.writer(out)
-        writer.writerow(["biotoolsID", "pmid", "pmcid", "doi"])
-        writer.writerows(rows)
-    with_pub = len({row[0] for row in rows})
-    print(f"Read {tools} tools; {with_pub} have at least one publication ID")
+                if not any(key[1:]):
+                    continue
+                types = publications.setdefault(key, [])
+                types.extend(t for t in publication.get("type") or [] if t not in types)
+
+    rows = [key + (";".join(types), str("Primary" in types).lower()) for key, types in publications.items()]
+
+    # Main publication(s) per tool: those typed Primary, else the first one (rows keep bio.tools' order)
+    rows_by_tool = {}
+    for row in rows:
+        rows_by_tool.setdefault(row[0], []).append(row)
+    main_rows = []
+    for tool_rows in rows_by_tool.values():
+        primary = [row for row in tool_rows if row[-1] == "true"]
+        main_rows.extend(primary or tool_rows[:1])
+
+    for path, selected in ((IDS_FILE, rows), (MAIN_FILE, main_rows)):
+        with open(path, "w", newline="", encoding="utf-8") as out:
+            writer = csv.writer(out)
+            writer.writerow(CSV_HEADER)
+            writer.writerows(selected)
+
+    print(f"Read {tools} tools; {len({row[0] for row in rows})} have at least one publication ID")
     print(f"Saved {len(rows)} publication rows to {IDS_FILE}")
+    fallback = sum(row[-1] == "false" for row in main_rows)
+    print(f"Saved {len(main_rows)} main publication rows ({len(main_rows) - fallback} primary, "
+          f"{fallback} first-listed fallback) to {MAIN_FILE}")
 
 
 def main():
