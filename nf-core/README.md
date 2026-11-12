@@ -41,8 +41,8 @@ If a pair is a sequence in some workflows and parallel in others, it is `one_dir
 
 | file | one row per | main columns |
 |---|---|---|
-| `biotools_pairs.csv` | workflow and tool pair (the same pair once for every workflow where it is valid) | `workflow_id`, `source`, `target`, `direction_type`, `source_biotools_name`, `target_biotools_name` |
-| `biotools_edges.csv` | tool pair (the workflows are listed in `workflow_ids`) | `source`, `target`, `direction_type`, `n_workflows`, `workflow_ids` |
+| `biotools_pairs.csv` | workflow and directed tool pair (the same pair once for every workflow where it is valid) | `workflow_id`, `source`, `target`, `parallel`. `parallel` is `parallel` when the two tools run side by side in that workflow (same input, no path between them), and `not parallel` when one comes after the other. The flag is exact for every workflow |
+| `biotools_edges.csv` | directed tool pair | `source`, `target`, `n_workflows`, `workflow_ids`. `n_workflows` is the number of workflows where this direction appears. A to B and B to A are two rows with their own counts. A `parallel` pair appears once forward and once reverse in each workflow, so its two rows have the same count |
 | `biotools_nodes.csv` | tool | `biotoolsID`, `biotools_name`, `n_workflows`, `matching_method` |
 
 `source` and `target` in the edges and pairs are bio.tools IDs. `matching_method` says how the ID was found: `biotool_id` (written in the module `meta.yml`), `doi`, `url` or `name`.
