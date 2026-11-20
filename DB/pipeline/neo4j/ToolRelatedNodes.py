@@ -53,7 +53,15 @@ def create_tools_nodes(driver, dict_config):
             LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
             CREATE (p:Tool {name: csv.name, label: csv.label})
             """ % (dict_config["tool_nodes"]))
-        
+
+        # Indexes for the MATCH by label/edam done for every CSV row below and in CitationsEdges.py
+        # Without them each row scans all the Tool or Keyword nodes
+        print("Creating Tool and Keyword indexes")
+        session.run("""CREATE INDEX index_tools_label IF NOT EXISTS FOR (n:Tool) ON (n.label)""")
+        session.run("""CREATE INDEX index_keywords_edam IF NOT EXISTS FOR (n:Keyword) ON (n.edam)""")
+        # Indexes are built in the background: wait until they are ready
+        session.run("""CALL db.awaitIndexes(600)""")
+
         # Creating Type of tool nodes
         # name: Name of the type of tool
         print("Creating Type of tool nodes")

@@ -28,7 +28,12 @@ def retrieve_in_out_operations(set_keywords):
         name=keywords.split("/")[3]
         # Function to know the full name of the ID in owlready2
         label = f"onto.{name}.label"
-        labels = eval(label)
+        try:
+            labels = eval(label)
+        except Exception:
+            # EDAM id not found in the ontology: skip it, as retrieve_topic does
+            print(f"EDAM term not found in the ontology, skipped: {keywords}")
+            continue
         # Insert the Id and name into the database
         for label in labels:
             c.execute("""INSERT OR IGNORE INTO Keywords
@@ -163,7 +168,15 @@ def create_Tools(c_para, conn_para, data_json):
                 p.pmid == c.id2
             ''')
     conn.commit()
-    
+
+    # Indexes for the lookups done for every tool (checkExist and the MetaCitations updates)
+    # Without them each lookup scans the whole table
+    c.execute('CREATE INDEX IF NOT EXISTS idx_pic_pmid ON PublicationsInCitations(pmid)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_pic_doi ON PublicationsInCitations(doi)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_meta_id1 ON MetaCitations(id1)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_meta_id2 ON MetaCitations(id2)')
+    conn.commit()
+
     print("enter parsing")
     for obj in data_json:
         isTool=False

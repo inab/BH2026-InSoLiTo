@@ -7,7 +7,7 @@ set -euo pipefail
 
 DB_NAME=DB/raw_data/insolito_2026
 PUBMED_DIR=DB/raw_data/pubmed_baseline
-OEB_JSON=DB/raw_data/oeb_tools.json
+OEB_JSON=DB/raw_data/observatory/tools_oeb_format.json
 IMPORT_DIR=DB/InSoLiToImport
 NEO4J_CONFIG=DB/pipeline/neo4j/full-config.ini
 PYTHON=.venv/bin/python
