@@ -131,12 +131,3 @@ def create_tools_nodes(driver, dict_config):
             MATCH (t:Keyword {edam:csv.edam_id}),(k:Keyword {edam:csv.subclass_edam})
             CREATE (k)-[:SUBCLASS {type:csv.subclass_type}]->(t)
             """ % (dict_config["subclass_edam_nodes"]))
-
-        # Creating Tool-Publications edges
-        # :HAS_TOOL: Label of the edges
-        print("Creating Tool-Publication edges")
-        session.run("""
-            LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
-            MATCH (t:Tool {label:csv.label}),(p:Publication {id:csv.Publication_id})
-            CREATE (p)-[:HAS_TOOL]->(t)
-            """ % (dict_config["tool_publication_nodes"]))
