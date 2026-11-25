@@ -19,27 +19,55 @@ def citations_edges(driver, Metacitations_file):
         print("Tool-Publication citations")
         session.run("""
             LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
-            MATCH (t:Tool {label:csv.id1}),(p:Publication {pmid:csv.id2})
-            CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(p)
+            CALL {
+                WITH csv
+                MATCH (t:Tool {label:csv.id1}),(p:Publication {pmid:csv.id2})
+                CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(p)
+            } IN TRANSACTIONS OF 10000 ROWS
         """ % Metacitations_file)
         session.run("""
             LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
-            MATCH (t:Tool {label:csv.id2}),(p:Publication {pmid:csv.id1})
-            CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(p)
+            CALL {
+                WITH csv
+                MATCH (t:Tool {label:csv.id2}),(p:Publication {pmid:csv.id1})
+                CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(p)
+            } IN TRANSACTIONS OF 10000 ROWS
         """ % Metacitations_file)
 
         print("Tool-Tool citations")
         session.run("""
             LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
-            MATCH (t:Tool {label:csv.id1}),(t2:Tool {label:csv.id2})
-            CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(t2)
+            CALL {
+                WITH csv
+                MATCH (t:Tool {label:csv.id1}),(t2:Tool {label:csv.id2})
+                CREATE (t)-[:METAOCCUR {times:toInteger(csv.n_citations), year:toInteger(csv.year)}]->(t2)
+            } IN TRANSACTIONS OF 10000 ROWS
         """ % Metacitations_file)
         
-        # Make an edge that is the sum of all edges
+    metaoccur_all_edges(driver)
+
+
+def metaoccur_all_edges(driver):
+    """
+    Create one METAOCCUR_ALL edge per pair with the sum of the METAOCCUR
+    times of all years. Deletes any previous METAOCCUR_ALL first, so it can
+    be run again on its own.
+    Only Tool nodes have outgoing METAOCCUR edges (Database labels are set
+    later, in DataScience.py). Small batches (10 tools) because a very cited
+    tool can have hundreds of thousands of METAOCCUR edges.
+    """
+    with driver.session() as session:
         session.run("""
-            match (t)-[m:METAOCCUR]->(p)
-            WITH t,p, collect(m) as co
-            UNWIND co as c
-            WITH t,p,sum(c.times) as sumo
-            create (t)-[:METAOCCUR_ALL {times: sumo}]->(p)
+            MATCH ()-[r:METAOCCUR_ALL]->()
+            CALL { WITH r DELETE r } IN TRANSACTIONS OF 10000 ROWS
+            """)
+        print("Sum of citations of all years (METAOCCUR_ALL)")
+        session.run("""
+            MATCH (t:Tool)
+            CALL {
+                WITH t
+                MATCH (t)-[m:METAOCCUR]->(p)
+                WITH t, p, sum(m.times) AS sumo
+                CREATE (t)-[:METAOCCUR_ALL {times: sumo}]->(p)
+            } IN TRANSACTIONS OF 10 ROWS
             """)

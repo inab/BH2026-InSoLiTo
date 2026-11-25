@@ -7,7 +7,7 @@ set -euo pipefail
 
 DB_NAME=DB/raw_data/insolito_2026
 PUBMED_DIR=DB/raw_data/pubmed_baseline
-OEB_JSON=DB/raw_data/oeb_tools.json
+OEB_JSON=DB/raw_data/observatory/tools_oeb_format.json
 IMPORT_DIR=DB/InSoLiToImport
 NEO4J_CONFIG=DB/pipeline/neo4j/full-config.ini
 PYTHON=.venv/bin/python
@@ -38,7 +38,7 @@ $PYTHON -u DB/pipeline/export_csv.py "$DB_NAME.db" "$IMPORT_DIR"
 
 step "3/4 Start local Neo4j"
 docker compose -f docker-compose.yml up -d InSoLiToDatabase2
-HTTP_PORT=$(grep -E '^NEO4J_HTTP_PORT=' .env | cut -d= -f2)
+HTTP_PORT=$(grep -E '^NEO4J_HTTP_PORT=' .env | cut -d= -f2 || true)
 for _ in $(seq 60); do
     curl -sf "http://localhost:${HTTP_PORT:-7474}" > /dev/null && break
     sleep 5

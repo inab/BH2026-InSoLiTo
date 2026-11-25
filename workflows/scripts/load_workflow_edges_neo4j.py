@@ -2,13 +2,15 @@
 Load the tool pairs of registered workflows into Neo4j as WORKFLOW_NEXT relationships.
 
 Goal: show in InSoLiTo, as their own layer, the tool pairs that registered
-workflows (WorkflowHub: Galaxy, Nextflow, nf-core) run one after the other,
-next to the co-citation edges (METAOCCUR) and the literature order (CITED_BEFORE).
+workflows (WorkflowHub: Galaxy, Nextflow; nf-core; Snakemake catalog) run one
+after the other, next to the co-citation edges (METAOCCUR) and the literature
+order (CITED_BEFORE).
 
 - One relationship per row of combined_edges.csv: (source)-[:WORKFLOW_NEXT]->(target),
-  with the number of workflows per source and their total. The literature columns
-  of that file are not loaded (that information is already in CITED_BEFORE).
-- The Nextflow column excludes nf-core workflows, so the three counts can be added.
+  with the number of workflows per source, their total, and the workflow IDs
+  of each source as lists. The literature columns of that file are not loaded
+  (that information is already in CITED_BEFORE).
+- The Nextflow column excludes nf-core workflows, so the four counts can be added.
 - Tools are matched to existing Tool/Database nodes by `label` (bio.tools ID),
   ignoring case. No data is changed: only the lookup ignores case.
 - Rows whose source or target is not in Neo4j are skipped (and counted).
@@ -34,7 +36,9 @@ DRY_RUN = True
 BATCH_SIZE = 10_000
 
 # Number of workflows per source, stored on each relationship
-SOURCES = ['n_wf_galaxy', 'n_wf_nextflow', 'n_wf_nfcore']
+SOURCES = ['n_wf_galaxy', 'n_wf_nextflow', 'n_wf_nfcore', 'n_wf_snakemake']
+# Workflow IDs per source (';'-separated in the CSV), stored as lists
+ID_COLUMNS = ['galaxy_ids', 'nextflow_ids', 'nfcore_ids', 'snakemake_ids']
 
 if 'localhost' not in NEO4J_URI and '127.0.0.1' not in NEO4J_URI:
     raise SystemExit(f'Refusing to write to a non-local Neo4j: {NEO4J_URI}')
@@ -59,7 +63,8 @@ node_id = {k: v[0]['id'] for k, v in by_lower.items() if len(v) == 1}
 # 2. Read the edges and map both ends to node ids
 con = duckdb.connect()
 rows = con.execute(
-    f"SELECT source, target, {', '.join(SOURCES)} FROM read_csv_auto('{EDGES_CSV}')").fetchall()
+    f"SELECT source, target, {', '.join(SOURCES + ID_COLUMNS)} "
+    f"FROM read_csv_auto('{EDGES_CSV}')").fetchall()
 print(f'Rows in CSV:                 {len(rows):,}')
 
 batch_rows, seen = [], set()
@@ -76,8 +81,12 @@ for source, target, *values in rows:
         duplicates += 1
         continue
     seen.add((a, b))
-    props = dict(zip(SOURCES, values))
-    props['n_workflows'] = sum(values)
+    counts = [v or 0 for v in values[:len(SOURCES)]]
+    ids = values[len(SOURCES):]
+    props = dict(zip(SOURCES, counts))
+    props['n_workflows'] = sum(counts)
+    for column, value in zip(ID_COLUMNS, ids):
+        props[column] = value.split(';') if value else []
     batch_rows.append({'a': a, 'b': b, 'props': props})
 
 print(f'Skipped, tool not in Neo4j:  {missing:,}')

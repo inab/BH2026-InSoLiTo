@@ -23,9 +23,8 @@ def create_publications_nodes(driver, PublicationsFile):
     """
     with driver.session() as session:
         print("Removing all data in the database")
-        # Delete all the previous graph
-        session.run("""MATCH ()-[r]->() DELETE r""")
-        session.run("""MATCH (r) DELETE r""")
+        # Delete all the previous graph, in batches so it fits in memory
+        session.run("""MATCH (n) CALL { WITH n DETACH DELETE n } IN TRANSACTIONS OF 10000 ROWS""")
         session.run("""DROP INDEX index_publications IF EXISTS""")
     
         # Create Publication nodes
@@ -39,13 +38,16 @@ def create_publications_nodes(driver, PublicationsFile):
         print("Creating Publications nodes")
         session.run("""
                 LOAD CSV WITH HEADERS FROM "file:///%s" AS csv
-                CREATE (:Publication {  title:csv.title,
-                                        subtitle: substring(csv.title,0,15) + "...",
-                                        year:toInteger(csv.year),
-                                        pmcid:csv.pmcid,
-                                        pmid:csv.pmid,
-                                        doi:csv.doi
-                                        })
+                CALL {
+                    WITH csv
+                    CREATE (:Publication {  title:csv.title,
+                                            subtitle: substring(csv.title,0,15) + "...",
+                                            year:toInteger(csv.year),
+                                            pmcid:csv.pmcid,
+                                            pmid:csv.pmid,
+                                            doi:csv.doi
+                                            })
+                } IN TRANSACTIONS OF 10000 ROWS
                 """ % (PublicationsFile))
         
         # Index for Publication nodes
